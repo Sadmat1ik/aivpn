@@ -154,7 +154,18 @@ class VPNManager: ObservableObject {
     /// as the byte counters). Preferred over NE's connectedDate so the
     /// stopwatch and the traffic counters can never desync.
     private var coreConnectedSince: Date?
-    private let bundleId = "com.aivpn.client.tunnel"
+    private var bundleId: String {
+        if let pluginsURL = Bundle.main.builtInPlugInsURL,
+           let contents = try? FileManager.default.contentsOfDirectory(at: pluginsURL, includingPropertiesForKeys: nil) {
+            for url in contents where url.pathExtension == "appex" {
+                if let b = Bundle(url: url), let id = b.bundleIdentifier {
+                    return id
+                }
+            }
+        }
+        let mainId = Bundle.main.bundleIdentifier ?? "com.aivpn.client"
+        return "\(mainId).tunnel"
+    }
 
     init() {
         loadManager()
