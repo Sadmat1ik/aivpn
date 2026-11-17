@@ -177,9 +177,10 @@ class VPNManager: ObservableObject {
     private func loadManager() {
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
             guard let self = self else { return }
-            if let m = managers?.first(where: {
+            let matched = managers?.first(where: {
                 ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.bundleId
-            }) {
+            }) ?? managers?.first(where: { $0.localizedDescription == "AIVPN" }) ?? managers?.first
+            if let m = matched {
                 if m.connection.status == .invalid {
                     // Stale/invalid profile (e.g. from a previous install with wrong entitlements).
                     // Remove it so the system "Allow VPN?" dialog is presented fresh.
