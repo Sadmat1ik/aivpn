@@ -18,7 +18,7 @@ struct AivpnApp: App {
         .onChange(of: scenePhase) { phase in
             // Skip retry when the user explicitly denied VPN permission — don't
             // re-show the system dialog on every app foreground after a denial.
-            if phase == .active, !vpnManager.isManagerLoaded, !vpnManager.permissionDenied {
+            if phase == .active {
                 vpnManager.retryManagerSetup()
             }
         }
