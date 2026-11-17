@@ -1196,41 +1196,54 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let account = "aivpn_device_privkey_v1"
         let service = "com.aivpn.client"
 
-        let query: [String: Any] = [
-            kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrAccount as String: account,
-            kSecAttrService as String: service,
-            kSecAttrAccessGroup as String: appGroup,
-            kSecReturnData as String:  true,
-            kSecMatchLimit as String:  kSecMatchLimitOne,
-        ]
-        return try loadDeviceIdentity(read: {
+        func readKey(withGroup: Bool) -> Data? {
+            var q: [String: Any] = [
+                kSecClass as String:       kSecClassGenericPassword,
+                kSecAttrAccount as String: account,
+                kSecAttrService as String: service,
+                kSecReturnData as String:  true,
+                kSecMatchLimit as String:  kSecMatchLimitOne,
+            ]
+            if withGroup {
+                q[kSecAttrAccessGroup as String] = appGroup
+            }
             var result: AnyObject?
-            let status = SecItemCopyMatching(query as CFDictionary, &result)
-            if status == errSecItemNotFound { return nil }
-            guard status == errSecSuccess, let data = result as? Data else {
-                throw self.makeError("device key unavailable: \(status)")
+            let status = SecItemCopyMatching(q as CFDictionary, &result)
+            if status == errSecSuccess, let data = result as? Data {
+                return data
             }
-            return data
-        }, generate: {
-            var bytes = [UInt8](repeating: 0, count: 32)
-            let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-            guard status == errSecSuccess else {
-                throw self.makeError("device key generation failed: \(status)")
-            }
-            return Data(bytes)
-        }, save: { key in
-            let addQuery: [String: Any] = [
+            return nil
+        }
+
+        func saveKey(_ key: Data, withGroup: Bool) -> Bool {
+            var addQ: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrAccount as String: account,
                 kSecAttrService as String: service,
-                kSecAttrAccessGroup as String: self.appGroup,
                 kSecValueData as String: key,
                 kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
             ]
-            let status = SecItemAdd(addQuery as CFDictionary, nil)
-            guard status == errSecSuccess else {
-                throw self.makeError("device key persistence failed: \(status)")
+            if withGroup {
+                addQ[kSecAttrAccessGroup as String] = self.appGroup
+            }
+            let status = SecItemAdd(addQ as CFDictionary, nil)
+            return status == errSecSuccess
+        }
+
+        return try loadDeviceIdentity(read: {
+            if let d = readKey(withGroup: true) { return d }
+            return readKey(withGroup: false)
+        }, generate: {
+            var bytes = [UInt8](repeating: 0, count: 32)
+            let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            if status == errSecSuccess { return Data(bytes) }
+            arc4random_buf(&bytes, bytes.count)
+            return Data(bytes)
+        }, save: { key in
+            if !saveKey(key, withGroup: true) {
+                if !saveKey(key, withGroup: false) {
+                    os_log(.error, "AIVPN: running with in-memory device key")
+                }
             }
         })
     }
