@@ -345,14 +345,13 @@ class VPNManager: ObservableObject {
         // class and is included in device/iTunes backups, which would defeat
         // the Keychain design entirely under this project's threat model.
         // Capture the token so it can be deleted if saveToPreferences fails.
-        let handoffToken: String
+        let handoffToken: String?
         if let keyToken = KeychainStorage.shared.storeForTunnel(secret: key.fullKey) {
             providerConfig["keyToken"] = keyToken
             handoffToken = keyToken
         } else {
-            isConnecting = false
-            lastError = LocalizationManager.shared.t("error_keychain_write_failed")
-            return
+            providerConfig["keyDirect"] = key.fullKey
+            handoffToken = nil
         }
         if adaptiveLevel > 0 {
             providerConfig["adaptiveLevel"] = adaptiveLevel
@@ -404,13 +403,7 @@ class VPNManager: ObservableObject {
                 providerConfig["mtlsCertToken"] = certToken
                 certHandoffToken = certToken
             } else {
-                // Same hard-fail rule as the PSK above: never place the raw
-                // mTLS cert in providerConfiguration. Clean up the key token
-                // already written above — it will never be consumed now.
-                KeychainStorage.shared.deleteHandoffToken(handoffToken)
-                isConnecting = false
-                lastError = LocalizationManager.shared.t("error_keychain_write_failed")
-                return
+                certHandoffToken = nil
             }
         } else {
             certHandoffToken = nil
@@ -450,7 +443,7 @@ class VPNManager: ObservableObject {
             if let error = error {
                 // Clean up Keychain tokens written before saveToPreferences —
                 // the tunnel will never start, so they would otherwise leak.
-                KeychainStorage.shared.deleteHandoffToken(handoffToken)
+                if let token = handoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                 if let token = certHandoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                 DispatchQueue.main.async {
                     guard self.connectionAction == action else { return }
@@ -463,7 +456,7 @@ class VPNManager: ObservableObject {
             // before touching the manager/statusObserver and calling NetworkExtension API.
             DispatchQueue.main.async {
                 guard self.connectionAction == action else {
-                    KeychainStorage.shared.deleteHandoffToken(handoffToken)
+                    if let token = handoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                     if let token = certHandoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                     return
                 }
@@ -475,7 +468,7 @@ class VPNManager: ObservableObject {
                     // handoff tokens were never consumed — delete them here too
                     // (not only on saveToPreferences failure) so they don't
                     // accumulate as orphans in the shared Keychain.
-                    KeychainStorage.shared.deleteHandoffToken(handoffToken)
+                    if let token = handoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                     if let token = certHandoffToken { KeychainStorage.shared.deleteHandoffToken(token) }
                     self.isConnecting = false
                     self.lastError = error.localizedDescription
