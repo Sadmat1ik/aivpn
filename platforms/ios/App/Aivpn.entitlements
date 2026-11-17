@@ -6,9 +6,5 @@
     <array>
         <string>allow-vpn</string>
     </array>
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.com.aivpn.client</string>
-    </array>
 </dict>
 </plist>
